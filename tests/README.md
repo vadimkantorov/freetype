@@ -20,3 +20,9 @@ them, as in:
 
   meson test -C out
 
+The `truetype-cleartype-compatibility` test constructs fonts in memory and
+needs no downloaded fonts.  It checks the legacy ClearType rules within
+minimal v40, including native opt-out and preserved v35, monochrome, and
+tricky-font behavior.
+It exits with status 77 when interpreter version 40 is unavailable.
+

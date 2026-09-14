@@ -660,7 +660,10 @@ FT_BEGIN_HEADER
    *     be found, for example, in Microsoft's Edge Browser on Windows~10).
    *     It is used in FreeType to select the 'minimal' subpixel hinting
    *     code, a stripped-down and higher performance version of the
-   *     'Infinality' code.
+   *     'Infinality' code.  It includes legacy ClearType support-function
+   *     handling and instruction restrictions for fonts that do not opt
+   *     into native ClearType, within minimal v40's movement, rounding,
+   *     and metric policies.
    *
    * @note:
    *   This property controls the behaviour of the bytecode interpreter and

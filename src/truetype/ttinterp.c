@@ -45,6 +45,28 @@
 #undef  FT_COMPONENT
 #define FT_COMPONENT  ttinterp
 
+#ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+  /* Apply the legacy rules in v40 for non-monochrome, non-tricky fonts
+   * unless INSTCTRL selector 3 opts into native ClearType.  Eligibility
+   * is independent of minimal v40's movement and post-IUP restrictions.
+   */
+#define LEGACY_CLEARTYPE_COMPAT( exc )                 \
+          ( (exc)->cleartype_compatibility &&         \
+            !(exc)->native_compatibility_disabled )
+
+  /* Classify the projection for the legacy horizontal-sampling rules.
+   * The reference excludes exactly positive Y; negative Y and diagonal
+   * projections are included.  The freedom vector still determines the
+   * actual movement, subject to minimal v40's existing restrictions.
+   */
+  static FT_Bool
+  Compat_Subpixel_Projection( TT_ExecContext  exc )
+  {
+    return FT_BOOL( !( exc->GS.projVector.x == 0 &&
+                      exc->GS.projVector.y == 0x4000 ) );
+  }
+#endif
+
 
 #define NO_SUBPIXEL_HINTING                                                  \
           ( ((TT_Driver)FT_FACE_DRIVER( exc->face ))->interpreter_version == \
@@ -2782,7 +2804,53 @@
     }
     else
       args[0] = exc->storage[I];
+#ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+    /* A valid storage-8 read activates the recognized VacuForm exception.
+     * Return zero without changing storage.  Activation survives CALL
+     * returns and lasts until the next execution reset.
+     */
+    if ( I == 8 && !BOUNDSL( I, exc->storeSize ) &&
+         LEGACY_CLEARTYPE_COMPAT( exc )        &&
+         ( exc->sp_detected & SP_DETECTED_VACUFORM ) )
+    {
+      exc->sp_in_vacuform = TRUE;
+      args[0] = 0;
+    }
+#endif
   }
+
+
+#ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+  /* Give glyph programs a writable copy of the storage inherited from
+   * `prep'.  WS and compatibility CALL entry share this preparation so
+   * neither can alter the cached prep storage.  Further writes and nested
+   * calls reuse the copy; fpgm/prep executions keep their current storage.
+   * An allocation failure returns before switching the active pointer,
+   * allowing CALL entry to fail before committing compatibility writes.
+   */
+  static FT_Error
+  Ensure_Glyph_Storage( TT_ExecContext  exc )
+  {
+    if ( exc->iniRange == tt_coderange_glyph &&
+         exc->storage != exc->glyfStorage    )
+    {
+      FT_Memory  memory = exc->memory;
+      FT_Error   error;
+
+
+      if ( FT_QRENEW_ARRAY( exc->glyfStorage,
+                           exc->glyfStoreSize,
+                           exc->storeSize ) )
+        return error;
+
+      exc->glyfStoreSize = exc->storeSize;
+      FT_ARRAY_COPY( exc->glyfStorage, exc->storage, exc->glyfStoreSize );
+      exc->storage = exc->glyfStorage;
+    }
+
+    return FT_Err_Ok;
+  }
+#endif
 
 
   /**************************************************************************
@@ -2805,6 +2873,11 @@
     }
     else
     {
+#ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+      exc->error = Ensure_Glyph_Storage( exc );
+      if ( exc->error )
+        return;
+#else
       if ( exc->iniRange == tt_coderange_glyph &&
            exc->storage != exc->glyfStorage    )
       {
@@ -2823,6 +2896,7 @@
         FT_ARRAY_COPY( exc->glyfStorage, exc->storage, exc->glyfStoreSize );
         exc->storage = exc->glyfStorage;
       }
+#endif
 
       exc->storage[I] = args[1];
     }
@@ -3303,6 +3377,177 @@
    */
 
 
+#ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+
+  /* Recognize bytecode prefixes of legacy FDEF support functions in
+   * `fpgm' or `prep'.  The ClearType compatibility paper linked in
+   * `ttinterp.h' describes these support-function families.
+   *
+   * Candidate numbers are 64-66 for DStroke/IStroke; 0-2, 4, 7, and 8
+   * for Jelle; 0 for VacuForm; and 58 for TomsDiag.  A matching prefix
+   * records the whole family, so other candidate numbers share its flag.
+   * Family flags survive later nonmatching redefinitions.  Delta
+   * signatures can match any number; the first four matching definitions
+   * consume the list, including repeated definitions of the same number.
+   *
+   * Recognition is recorded independently of the current rendering mode:
+   * the font program can run before that mode is known.  The instruction
+   * hooks apply the recorded rules only under LEGACY_CLEARTYPE_COMPAT.
+   */
+  static void
+  GDI_Detect_Function( TT_ExecContext  exc,
+                       TT_DefRecord*   rec,
+                       FT_ULong        n )
+  {
+    static const FT_Byte  sig_dandi[4]  =
+      { 0xB0, 0x16, 0x43, 0x58 };
+    static const FT_Byte  sig_jelle1[5] =
+      { 0x01, 0xB0, 0x18, 0x43, 0x58 };
+    static const FT_Byte  sig_jelle2[6] =
+      { 0x01, 0x18, 0xB0, 0x18, 0x43, 0x58 };
+    static const FT_Byte  sig_vacu[7]   =
+      { 0x45, 0x23, 0x46, 0x60, 0x20, 0xB0, 0x26 };
+    static const FT_Byte  sig_tom[10]   =
+      { 0x20, 0x20, 0xB0, 0x01, 0x60, 0x46, 0xB0, 0x40, 0x23, 0x42 };
+    static const FT_Byte  sig_delta1[13] =
+      { 0x4B, 0x53, 0x23, 0x4B, 0x51, 0x5A, 0x58,
+        0x38, 0x1B, 0x21, 0x21, 0x59, 0x2D };
+    static const FT_Byte  sig_delta2[9] =
+      { 0x4B, 0x54, 0x58, 0x38, 0x1B, 0x21, 0x21, 0x59, 0x2D };
+
+    const FT_Byte*  body  = exc->code + rec->start;
+    FT_Long         avail = exc->codeSize - rec->start;
+
+
+#define SP_SIG_MATCH( sig )                                \
+      ( avail >= (FT_Long)sizeof ( sig ) &&              \
+        ft_memcmp( body, sig, sizeof ( sig ) ) == 0 )
+
+    if ( n >= 64 && n <= 66 && SP_SIG_MATCH( sig_dandi ) )
+      exc->sp_detected |= SP_DETECTED_DANDISTROKE;
+
+    if ( ( n <= 2 || n == 4 || n == 7 || n == 8 )    &&
+         ( SP_SIG_MATCH( sig_jelle1 ) ||
+           SP_SIG_MATCH( sig_jelle2 ) )              )
+      exc->sp_detected |= SP_DETECTED_JELLE;
+
+    if ( n == 0 && SP_SIG_MATCH( sig_vacu ) )
+      exc->sp_detected |= SP_DETECTED_VACUFORM;
+
+    if ( n == 58 && SP_SIG_MATCH( sig_tom ) )
+      exc->sp_detected |= SP_DETECTED_TOMSDIAG;
+
+    if ( SP_SIG_MATCH( sig_delta2 ) ||
+         SP_SIG_MATCH( sig_delta1 ) )
+    {
+      /* The first four matching definitions consume entries, including
+       * redefinitions of an already recorded number.  Do not deduplicate.
+       */
+      if ( exc->sp_num_delta_funcs < 4 )
+        exc->sp_delta_funcs[exc->sp_num_delta_funcs++] = (FT_UShort)n;
+    }
+
+#undef SP_SIG_MATCH
+  }
+
+
+  /* Enter the recognized CALL exceptions after the caller initializes
+   * the frame.  DStroke/IStroke and Jelle save and clear storage 22 or 24;
+   * TomsDiag saves the cut-in and raises it to its maximum.
+   * Storage preparation must succeed before a saved value or frame flag
+   * is committed.  Missing storage slots simply omit that exception.
+   *
+   * LOOPCALL bypasses this setup.  Recognized delta CALLs set a boolean,
+   * not a nesting count; leaving an inner recognized CALL clears it even
+   * while an outer recognized CALL remains active.
+   */
+  static void
+  GDI_Enter_Call( TT_ExecContext  exc,
+                  TT_CallRec*     frame,
+                  FT_ULong        function )
+  {
+    frame->sp_flags = 0;
+
+    if ( LEGACY_CLEARTYPE_COMPAT( exc ) )
+    {
+      if ( function >= 64 && function <= 66 && exc->storeSize > 22 &&
+           ( exc->sp_detected & SP_DETECTED_DANDISTROKE ) )
+      {
+        exc->error = Ensure_Glyph_Storage( exc );
+        if ( exc->error )
+          return;
+        frame->sp_saved_storage = exc->storage[22];
+        exc->storage[22]        = 0;
+        frame->sp_flags        |= SP_FRAME_STROKE;
+      }
+
+      if ( ( function <= 2 || function == 4 ||
+             function == 7 || function == 8 ) && exc->storeSize > 24 &&
+           ( exc->sp_detected & SP_DETECTED_JELLE ) )
+      {
+        exc->error = Ensure_Glyph_Storage( exc );
+        if ( exc->error )
+          return;
+        frame->sp_saved_storage = exc->storage[24];
+        exc->storage[24]        = 0;
+        frame->sp_flags        |= SP_FRAME_SPACING;
+      }
+
+      if ( function == 58 && ( exc->sp_detected & SP_DETECTED_TOMSDIAG ) )
+      {
+        frame->sp_flags       |= SP_FRAME_DIAGONAL;
+        frame->sp_saved_cutin  = exc->GS.control_value_cutin;
+
+        exc->GS.control_value_cutin = 0x7FFFFFFF;
+      }
+
+      {
+        FT_UInt  i;
+
+
+        for ( i = 0; i < exc->sp_num_delta_funcs; i++ )
+          if ( exc->sp_delta_funcs[i] == function )
+          {
+            frame->sp_flags     |= SP_FRAME_DELTA;
+            exc->sp_in_delta_fn  = TRUE;
+            break;
+          }
+      }
+    }
+  }
+
+
+  /* Restore the storage and cut-in values owned by this frame and clear
+   * its delta activity.  ENDF uses this on normal return; error unwinding
+   * calls it from the innermost frame outwards so each caller regains its
+   * own values.  Restore committed state even if native opt-out changed
+   * inside the call.  VacuForm activity is execution-wide, not frame-owned.
+   */
+  static void
+  GDI_Leave_Call( TT_ExecContext  exc,
+                  TT_CallRec*     frame )
+  {
+    if ( frame->sp_flags )
+    {
+      if ( frame->sp_flags & SP_FRAME_STROKE )
+        exc->storage[22] = frame->sp_saved_storage;
+
+      if ( frame->sp_flags & SP_FRAME_SPACING )
+        exc->storage[24] = frame->sp_saved_storage;
+
+      if ( frame->sp_flags & SP_FRAME_DIAGONAL )
+        exc->GS.control_value_cutin = frame->sp_saved_cutin;
+
+      if ( frame->sp_flags & SP_FRAME_DELTA )
+        exc->sp_in_delta_fn = FALSE;
+
+      frame->sp_flags = 0;
+    }
+  }
+
+#endif
+
+
   /**************************************************************************
    *
    * FDEF[]:       Function DEFinition
@@ -3365,6 +3610,10 @@
     if ( n > exc->maxFunc )
       exc->maxFunc = (FT_UInt16)n;
 
+#ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+    GDI_Detect_Function( exc, rec, n );
+#endif
+
     /* Now skip the whole function definition. */
     /* We don't allow nested IDEFS & FDEFs.    */
 
@@ -3419,8 +3668,13 @@
       exc->length = 0;
     }
     else
+    {
+#ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+      GDI_Leave_Call( exc, pRec );
+#endif
       /* Loop through the current function */
       Ins_Goto_CodeRange( exc, pRec->Caller_Range, pRec->Caller_IP );
+    }
 
     /* Exit the current call frame.                      */
 
@@ -3500,6 +3754,12 @@
     pCrec->Cur_Count    = 1;
     pCrec->Def          = def;
 
+#ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+    GDI_Enter_Call( exc, pCrec, F );
+    if ( exc->error )
+      return;
+#endif
+
     exc->callTop++;
 
     Ins_Goto_CodeRange( exc, def->range, def->start );
@@ -3576,6 +3836,11 @@
       pCrec->Caller_IP    = exc->IP + 1;
       pCrec->Cur_Count    = (FT_Int)args[0];
       pCrec->Def          = def;
+
+#ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+      /* LOOPCALL does not enter the reference engine's CALL exceptions. */
+      pCrec->sp_flags = 0;
+#endif
 
       exc->callTop++;
 
@@ -4503,6 +4768,18 @@
       }
     }
 
+#ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+    /* After both IUP axes, VacuForm sees a current distance of one pixel
+     * as one pixel plus 1/64.  Original-distance queries are unaffected.
+     */
+    if ( ( exc->opcode & 1 )           &&
+         LEGACY_CLEARTYPE_COMPAT( exc ) &&
+         exc->sp_in_vacuform           &&
+         exc->compat_iup_called == 3   &&
+         D == 64                      )
+      D++;
+#endif
+
     args[0] = D;
   }
 
@@ -4759,6 +5036,10 @@
     {
       exc->GS.instruct_control &= ~(FT_Byte)Kf;
       exc->GS.instruct_control |= (FT_Byte)L;
+#ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+      if ( K == 3 )
+        exc->native_compatibility_disabled = FT_BOOL( L & 4 );
+#endif
     }
 
     /* except to change the subpixel flags temporarily */
@@ -4771,6 +5052,7 @@
       if ( SUBPIXEL_HINTING_MINIMAL )
       {
         exc->backward_compatibility = ( L & 4 ) ^ 4;
+        exc->native_compatibility_disabled = FT_BOOL( L & 4 );
 
         /* A glyph can temporarily switch between backward-compatible */
         /* and native ClearType, so update the native-X state too.    */
@@ -5215,6 +5497,27 @@
   }
 
 
+#ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+  /* Test the additional legacy eligibility for DELTAP and for SHPIX in
+   * recognized delta CALLs.  Exactly positive-Y projection is required.
+   * A composite qualifies regardless of touches/IUP; a simple glyph needs
+   * a Y-touched point before IUP[y].  Callers have checked the point index.
+   * Passing this test does not bypass minimal v40's movement restrictions;
+   * any permitted displacement is still calculated from the freedom vector.
+   */
+  static FT_Bool
+  Compat_Delta_Allowed( TT_ExecContext  exc,
+                        TT_GlyphZone    zone,
+                        FT_UInt         point )
+  {
+    return FT_BOOL( !Compat_Subpixel_Projection( exc ) &&
+                    ( exc->is_composite ||
+                      ( ( zone->tags[point] & FT_CURVE_TAG_TOUCH_Y ) &&
+                        !( exc->compat_iup_called & 1 ) ) ) );
+  }
+#endif
+
+
   /**************************************************************************
    *
    * SHPIX[]:      SHift points by a PIXel amount
@@ -5261,6 +5564,14 @@
       }
       else
 #ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+      /* The extra legacy SHPIX filter applies only inside recognized
+       * delta CALLs.  Ordinary SHPIX retains minimal's rules below,
+       * including its twilight exception.
+       */
+      if ( LEGACY_CLEARTYPE_COMPAT( exc ) && exc->sp_in_delta_fn &&
+           !Compat_Delta_Allowed( exc, &exc->zp2, point ) )
+        continue;
+      else
       if ( exc->backward_compatibility )
       {
         /* Special case: allow SHPIX to move points in the twilight zone.  */
@@ -5296,6 +5607,9 @@
   {
     FT_UShort   point = 0;
     FT_F26Dot6  distance;
+#ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+    FT_F26Dot6  target_dist = args[1];
+#endif
 
 
     point = (FT_UShort)args[0];
@@ -5317,12 +5631,41 @@
       exc->zp1.cur[point] = exc->zp1.org[point];
     }
 
+#ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+    /* Apply the legacy relative cut-in to the requested stack distance.
+     * This is an acceptance threshold, not a 1/16-pixel rounding operation.
+     */
+    if ( LEGACY_CLEARTYPE_COMPAT( exc ) &&
+         Compat_Subpixel_Projection( exc ) )
+    {
+      FT_F26Dot6  org_dist = DUALPROJ( &exc->zp1.org[point],
+                                       &exc->zp0.org[exc->GS.rp0] );
+
+
+      /* Zero original distance denotes placement, not a stroke weight. */
+      if ( org_dist != 0 )
+      {
+        FT_F26Dot6  delta = SUB_LONG( target_dist, org_dist );
+
+
+        if ( delta < 0 )
+          delta = NEG_LONG( delta );
+        if ( delta > exc->GS.control_value_cutin / 16 )
+          target_dist = org_dist;
+      }
+    }
+#endif
+
     distance = PROJECT( exc->zp1.cur + point, exc->zp0.cur + exc->GS.rp0 );
 
     exc->func_move( exc,
                     &exc->zp1,
                     point,
+#ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+                    SUB_LONG( target_dist, distance ) );
+#else
                     SUB_LONG( args[1], distance ) );
+#endif
 
     exc->GS.rp1 = exc->GS.rp0;
     exc->GS.rp2 = point;
@@ -5685,6 +6028,23 @@
       if ( ( org_dist ^ cvt_dist ) < 0 )
         cvt_dist = NEG_LONG( cvt_dist );
     }
+
+    /* Only the legacy unrounded-MIRP exception gains this relative cut-in.
+     * Rejecting the CVT distance selects the original distance; it does not
+     * round points to a finer grid.  Rounded MIRP retains its rules below.
+     */
+#ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+    if ( !( exc->opcode & 4 ) && LEGACY_CLEARTYPE_COMPAT( exc ) &&
+         Compat_Subpixel_Projection( exc ) &&
+         exc->GS.gep0 == exc->GS.gep1 )
+    {
+      delta = SUB_LONG( cvt_dist, org_dist );
+      if ( delta < 0 )
+        delta = NEG_LONG( delta );
+      if ( delta > exc->GS.control_value_cutin / 16 )
+        cvt_dist = org_dist;
+    }
+#endif
 
     /* control value cut-in and round */
 
@@ -6316,6 +6676,11 @@
 
 
 #ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+    /* Track legacy IUP state separately, even when minimal's repeated-IUP
+     * check below suppresses execution.  Delta and VacuForm hooks use it.
+     */
+    exc->compat_iup_called |= 1U << ( exc->opcode & 1 );
+
     /* See `ttinterp.h' for details on backward compatibility mode.  */
     /* Allow IUP until it has been called on both axes.  Immediately */
     /* return on subsequent ones.                                    */
@@ -6483,6 +6848,13 @@
           B *= F;
 
 #ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+          /* Legacy eligibility is an additional DELTAP restriction;
+           * minimal's touch, direction, and post-IUP checks still follow.
+           */
+          if ( LEGACY_CLEARTYPE_COMPAT( exc ) &&
+               !Compat_Delta_Allowed( exc, &exc->zp0, A ) )
+            continue;
+
           /* See `ttinterp.h' for details on backward compatibility mode. */
           if ( exc->backward_compatibility )
           {
@@ -6806,6 +7178,9 @@
         call->Caller_IP    = exc->IP + 1;
         call->Cur_Count    = 1;
         call->Def          = def;
+#ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+        call->sp_flags     = 0;
+#endif
 
         Ins_Goto_CodeRange( exc, def->range, def->start );
 
@@ -7490,6 +7865,12 @@
     return FT_Err_Ok;
 
   LErrorLabel_:
+#ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+    /* Each inner frame restores the value observed by its caller. */
+    while ( exc->callTop > 0 )
+      GDI_Leave_Call( exc, &exc->callStack[--exc->callTop] );
+#endif
+
     if ( exc->error && !exc->instruction_trap )
       FT_TRACE1(( "  The interpreter returned error 0x%x\n", exc->error ));
 
@@ -7598,6 +7979,21 @@
     /* reset graphics state */
     exec->GS         = size->GS;
     exec->func_round = (TT_Round_Func)Round_To_Grid;
+
+#ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+    /* Start each glyph execution with prep's INSTCTRL selector 3 state;
+     * glyph-level INSTCTRL can change it for this execution only.  Reset
+     * legacy IUP, delta, and VacuForm activity, retaining FDEF recognition.
+     * This precedes the debugger hook: TT_RunIns re-entry while stepping
+     * must preserve active compatibility CALL frames and execution state.
+     */
+    exec->native_compatibility_disabled =
+      FT_BOOL( exec->GS.instruct_control & 4 );
+    exec->compat_iup_called = 0;
+    exec->sp_in_delta_fn    = FALSE;
+    exec->sp_in_vacuform    = FALSE;
+#endif
+
     Compute_Funcs( exec );
 
 #ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
