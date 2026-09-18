@@ -137,6 +137,23 @@ FT_BEGIN_HEADER
                       FT_F26Dot6      value );
 
 
+#ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+
+  /* Legacy support-function signatures recognized by `Ins_FDEF'. */
+#define SP_DETECTED_DANDISTROKE  0x01
+#define SP_DETECTED_JELLE        0x02
+#define SP_DETECTED_VACUFORM     0x04
+#define SP_DETECTED_TOMSDIAG     0x08
+
+  /* Per-call-frame state of the legacy support functions. */
+#define SP_FRAME_DELTA           0x01
+#define SP_FRAME_STROKE          0x02
+#define SP_FRAME_SPACING         0x04
+#define SP_FRAME_DIAGONAL        0x08
+
+#endif
+
+
   /**************************************************************************
    *
    * This structure defines a call record, used to manage function calls.
@@ -148,6 +165,16 @@ FT_BEGIN_HEADER
     FT_Long  Cur_Count;
 
     TT_DefRecord  *Def; /* either FDEF or IDEF */
+
+#ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
+    /* Saved compatibility writes belong to the CALL frame.  The frame
+     * flags select storage 22 or 24 and/or the TomsDiag cut-in for normal
+     * return and reverse-order error unwinding.  LOOPCALL sets no flags.
+     */
+    FT_UInt     sp_flags;
+    FT_F26Dot6  sp_saved_cutin;
+    FT_Long     sp_saved_storage;
+#endif
 
   } TT_CallRec, *TT_CallStack;
 
@@ -393,7 +420,48 @@ FT_BEGIN_HEADER
 
     FT_Render_Mode     mode;  /* target render mode */
 
-#endif /* TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL */
+    /* Legacy ClearType rules supplement minimal v40's existing movement
+     * restrictions.  `cleartype_compatibility' records the environment
+     * selected by `tt_loader_init': v40, non-monochrome, and non-tricky.
+     * It is independent of the font's native ClearType opt-out.
+     *
+     * `native_compatibility_disabled' tracks INSTCTRL selector 3.  It is
+     * initialized from prep's graphics state at glyph entry and updated
+     * by INSTCTRL in prep or in the glyph.  LEGACY_CLEARTYPE_COMPAT in
+     * `ttinterp.c' combines these two flags; minimal's movement and IUP
+     * restrictions continue to use `backward_compatibility'.
+     *
+     * The cached environment and interpreter version trigger prep
+     * re-execution when a load changes the bytecode environment.
+     *
+     * See Microsoft's "Backwards compatibility of TrueType instructions
+     * with Microsoft ClearType":
+     * https://learn.microsoft.com/en-us/typography/cleartype/truetypecleartype
+     */
+    FT_Bool  cleartype_compatibility;
+    FT_Bool  native_compatibility_disabled;
+    FT_UInt  interpreter_version; /* prep environment cache */
+
+    /* Legacy activity resets at glyph entry, before the debugger hook.
+     * IUP[y] is bit 0 and IUP[x] bit 1, independently of minimal's curfew.
+     * Delta activity is boolean: a recognized inner CALL's return clears
+     * it.  A recognized storage-8 read activates VacuForm until the next
+     * execution reset, including after the function returns.
+     */
+    FT_UInt  compat_iup_called;
+    FT_Bool  sp_in_delta_fn;
+    FT_Bool  sp_in_vacuform;
+
+    /* Recognition is historical, shared across a family of function IDs,
+     * and retained across prep/glyph runs and nonmatching redefinitions.
+     * Delta IDs record the first four matching definitions; duplicates
+     * deliberately consume entries, as in the reference engine.
+     */
+    FT_UInt    sp_detected;
+    FT_UShort  sp_delta_funcs[4];
+    FT_UInt    sp_num_delta_funcs;
+#endif
+
 
     /* We maintain two counters (in addition to the instruction counter) */
     /* that act as loop detectors for LOOPCALL and jump opcodes with     */

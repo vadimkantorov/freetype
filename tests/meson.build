@@ -11,4 +11,13 @@ test('issue-1063',
   env: test_env,
   suite: 'regression')
 
+test_cleartype_compatibility = executable('truetype-cleartype-compatibility',
+  files([ 'truetype-cleartype-compatibility/main.c' ]),
+  dependencies: freetype_dep,
+)
+
+test('truetype-cleartype-compatibility',
+  test_cleartype_compatibility,
+  suite: 'regression')
+
 # EOF

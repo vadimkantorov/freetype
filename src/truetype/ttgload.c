@@ -2214,6 +2214,7 @@
       FT_Bool         reexecute = FALSE;
 #ifdef TT_SUPPORT_SUBPIXEL_HINTING_MINIMAL
       TT_Driver       driver    = (TT_Driver)FT_FACE_DRIVER( glyph->face );
+      FT_Bool         compatibility;
 #endif
 
 
@@ -2235,6 +2236,25 @@
       /* reset backward compatibility; note that */
       /* the CVT program always runs without it  */
       exec->backward_compatibility = 0;
+
+      compatibility = FT_BOOL(
+                   driver->interpreter_version == TT_INTERPRETER_VERSION_40 &&
+                   mode != FT_RENDER_MODE_MONO                              &&
+                   !FT_IS_TRICKY( glyph->face ) );
+
+
+      /* Legacy rules can also affect `prep'.  Its cached state must */
+      /* reflect both the rendering environment and GETINFO version. */
+      if ( compatibility != exec->cleartype_compatibility ||
+           driver->interpreter_version != exec->interpreter_version )
+      {
+        FT_TRACE4(( "tt_loader_init: compatibility environment change,"
+                    " re-executing `prep' table\n" ));
+
+        exec->cleartype_compatibility = compatibility;
+        exec->interpreter_version    = driver->interpreter_version;
+        reexecute                    = TRUE;
+      }
 
       if ( driver->interpreter_version == TT_INTERPRETER_VERSION_40 )
       {
