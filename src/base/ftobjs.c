@@ -970,8 +970,9 @@
      * - Then, auto-hint if FT_LOAD_FORCE_AUTOHINT is set or if we don't
      *   have a native font hinter.
      *
-     * - Otherwise, auto-hint for LIGHT hinting mode or if there isn't
-     *   any hinting bytecode in the TrueType/OpenType font.
+     * - Otherwise, auto-hint for LIGHT hinting mode if the native hinter
+     *   can't provide it, or if there isn't any hinting bytecode in the
+     *   TrueType/OpenType font.
      *
      * - Exception: The font is `tricky' and requires the native hinter to
      *   load properly.
@@ -995,6 +996,7 @@
       {
         FT_Render_Mode  mode = FT_LOAD_TARGET_MODE( load_flags );
         FT_Bool         is_light_type1;
+        FT_Bool         is_light_truetype = FALSE;
         TT_Face         ttface = (TT_Face)face;
 
 
@@ -1004,6 +1006,28 @@
           ft_strstr( FT_Get_Font_Format( face ), "Type 1" ) != NULL &&
           ((PS_Driver)driver)->hinting_engine == FT_HINTING_ADOBE;
 
+        /* TrueType v40 can provide native light hinting. */
+        if ( mode == FT_RENDER_MODE_LIGHT &&
+             !ft_strcmp( driver->root.clazz->module_name, "truetype" ) )
+        {
+          FT_Service_Properties  service;
+          FT_UInt                interpreter_version;
+
+
+          service = (FT_Service_Properties)
+                      ft_module_get_service( FT_MODULE( driver ),
+                                             FT_SERVICE_ID_PROPERTIES,
+                                             0 );
+
+          if ( service                                       &&
+               service->get_property                         &&
+               !service->get_property( FT_MODULE( driver ),
+                                       "interpreter-version",
+                                       &interpreter_version ) &&
+               interpreter_version == TT_INTERPRETER_VERSION_40 )
+            is_light_truetype = TRUE;
+        }
+
         /* the check for `num_locations' assures that we actually    */
         /* test for instructions in a TTF and not in a CFF-based OTF */
         /*                                                           */
@@ -1012,7 +1036,8 @@
         /* both `fpgm' and `prep' tables are missing                 */
         if ( ( mode == FT_RENDER_MODE_LIGHT           &&
                ( !FT_DRIVER_HINTS_LIGHTLY( driver ) &&
-                 !is_light_type1                    ) )         ||
+                 !is_light_type1                    &&
+                 !is_light_truetype                 ) )         ||
              ( FT_IS_SFNT( face )                             &&
                ttface->num_locations                          &&
                ttface->font_program_size == 0                 &&
