@@ -1141,13 +1141,14 @@
       if ( coord == peak_16 )
         continue;                /* at peak -> factor 1                  */
 
-      if ( coord == 0 )
-        return 0;                /* default location -> region gives 0   */
-
       if ( min_16 > peak_16             ||
            peak_16 > max_16             ||
            ( min_16 < 0 && max_16 > 0 ) )
         continue;                /* ill-formed axis -> factor 1          */
+
+      /* Invalid axes are ignored even at the default coordinate. */
+      if ( coord == 0 )
+        return 0;                /* default location -> region gives 0   */
 
       if ( coord < min_16 || coord > max_16 )
         return 0;                /* outside range -> region gives 0      */

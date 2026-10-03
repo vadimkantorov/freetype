@@ -2310,19 +2310,29 @@
 
       FT_TRACE6(( "    axis %u coordinate %.5f:\n", i, (double)ncv / 65536 ));
 
-      if ( ncv == 0 )
-      {
-        FT_TRACE6(( "      axis coordinate is zero, stop\n" ));
-        apply = 0;
-        break;
-      }
-
       if ( tuple_coords[i] == ncv )
       {
         FT_TRACE6(( "      tuple coordinate %.5f fits perfectly\n",
                     (double)tuple_coords[i] / 65536 ));
         /* `apply' does not change */
         continue;
+      }
+
+      /* Invalid intermediate axes contribute one, even when ncv is zero. */
+      if ( ( tupleIndex & GX_TI_INTERMEDIATE_TUPLE ) &&
+           ( im_start_coords[i] > tuple_coords[i] ||
+             tuple_coords[i] > im_end_coords[i]   ||
+             ( im_start_coords[i] < 0 && im_end_coords[i] > 0 ) ) )
+      {
+        FT_TRACE6(( "      invalid intermediate tuple range, ignore\n" ));
+        continue;
+      }
+
+      if ( ncv == 0 )
+      {
+        FT_TRACE6(( "      axis coordinate is zero, stop\n" ));
+        apply = 0;
+        break;
       }
 
       if ( !( tupleIndex & GX_TI_INTERMEDIATE_TUPLE ) )
