@@ -132,6 +132,65 @@ Exit:
 }
 
 
+static int
+test_region_scalars( FT_Library   library,
+                     const char*  testdata_dir )
+{
+  static const FT_Fixed  locations[] =
+  {
+    -0x10000L, 0, 0x4000L, 0x8000L, 0xC000L, 0x10000L
+  };
+  static const FT_Pos  valid_deltas[] = { 0, 0, 32, 64, 32, 0 };
+
+  FT_Face  face = NULL;
+  char     filepath[FILENAME_MAX];
+  FT_UInt  i, j, k;
+  int      ret = 1;
+
+
+  snprintf( filepath, sizeof ( filepath ), "%s/region-scalars.ttf",
+            testdata_dir );
+  if ( FT_New_Face( library, filepath, 0, &face ) )
+    goto Exit;
+
+  for ( i = 0; i < sizeof ( locations ) / sizeof ( locations[0] ); i++ )
+  {
+    /* Keep TEST at its peak so gvar is evaluated while LEAF can be zero. */
+    FT_Fixed  coords[] = { 0x10000L, locations[i] };
+
+
+    if ( FT_Set_Var_Blend_Coordinates( face, 2, coords ) )
+      goto Exit;
+
+    for ( j = 0; j < 5; j++ )
+      for ( k = 0; k < 2; k++ )
+      {
+        /* Three invalid axes, a zero peak, and a well-formed tent. */
+        FT_Pos   delta = j < 4 ? 64 : valid_deltas[i];
+        FT_Pos   first_x = ( k ? 500 : 100 ) + delta;
+        FT_UInt  glyph = 2 + j + 5 * k;
+
+
+        if ( FT_Load_Glyph( face, glyph,
+                           FT_LOAD_NO_SCALE | FT_LOAD_NO_HINTING ) )
+          goto Exit;
+        if ( face->glyph->outline.n_points != 3 ||
+             face->glyph->outline.points[0].x != first_x )
+        {
+          fprintf( stderr, "Unexpected region scalar for glyph %u at %ld\n",
+                   glyph, (long)locations[i] );
+          goto Exit;
+        }
+      }
+  }
+  ret = 0;
+
+Exit:
+  FT_Done_Face( face );
+  return ret;
+}
+
+
 int
 main( void )
 {
@@ -166,6 +225,7 @@ main( void )
     ret |= test_font( library, testdata_dir, &test_fonts[i] );
 
   ret |= test_reset_without_axes( library, testdata_dir );
+  ret |= test_region_scalars( library, testdata_dir );
 
   FT_Done_FreeType( library );
   return ret;
