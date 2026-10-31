@@ -47,6 +47,12 @@ CHANGES BETWEEN 2.14.3 and 2.15.0 (2026-Oct-12)
     'Calibri', 'Corbel', 'Constantia', 'Malgun Gothic', 'SimSun',  and
     'Comic Sans MS'.
 
+    FT_LOAD_TARGET_LIGHT now uses the native TrueType version 40
+    interpreter instead of the auto-hinter. TrueType version 35 and
+    fonts without usable hinting bytecode retain their previous behavior.
+    Applications that explicitly want the auto-hinter should use
+    FT_LOAD_FORCE_AUTOHINT.
+
 
   II. IMPORTANT BUG FIXES
 
