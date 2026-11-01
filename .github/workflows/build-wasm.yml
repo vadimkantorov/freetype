@@ -1,0 +1,20 @@
+name: build-wasm
+on: workflow_dispatch
+jobs:
+  build-wasm:
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Install Prerequisites
+        run:  echo ok #sudo apt-get install -y automake autoconf autopoint gettext   gperf p7zip-full strace icu-devtools libarchive-tools
+
+      - name: Setup Emscripten
+        uses: emscripten-core/setup-emsdk@v15
+        with:
+          version: "6.0.6"
+
+      - uses: actions/checkout@v4
+
+      - name: Build wasm
+        run: |
+          emconfigure ./configure
+          emmake make
