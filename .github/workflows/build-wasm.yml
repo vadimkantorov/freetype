@@ -53,5 +53,9 @@ jobs:
           #emconfigure ./configure
           #emmake make
           
-          emconfigure ./configure CFLAGS_BUILD="-sEXECUTABLE -sNODERAWFS"
-          emmake make 
+          #workswithpatch
+          #emconfigure ./configure CFLAGS_BUILD="-sEXECUTABLE -sNODERAWFS"
+          #emmake make 
+          
+          emconfigure ./configure --disable-shared
+          emmake make
