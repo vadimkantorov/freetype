@@ -17,5 +17,6 @@ jobs:
       - name: Build wasm
         run: |
           bash autogen.sh
+          export CFLAGS_BUILD="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
           emconfigure ./configure
-          emmake make CFLAGS="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
+          emmake make
