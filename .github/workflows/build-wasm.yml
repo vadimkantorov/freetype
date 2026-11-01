@@ -48,6 +48,10 @@ jobs:
           #emconfigure ./configure CC_BUILD=gcc
           #emmake make
           
-          export CC_BUILD=gcc
-          emconfigure ./configure
-          emmake make
+          #workswithpatch
+          #export CC_BUILD=gcc
+          #emconfigure ./configure
+          #emmake make
+          
+          emconfigure ./configure CFLAGS_BUILD="-sEXECUTABLE -sNODERAWFS"
+          emmake make 
