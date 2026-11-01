@@ -44,5 +44,10 @@ jobs:
           #emconfigure ./configure
           #emmake make 
 
-          emconfigure ./configure CC_BUILD=gcc
+          #workswithpatch
+          #emconfigure ./configure CC_BUILD=gcc
+          #emmake make
+          
+          export CC_BUILD=gcc
+          emconfigure ./configure
           emmake make
