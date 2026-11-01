@@ -42,17 +42,20 @@ AC_CHECK_HEADER([windows.h], [LT_PROG_RC])
 
 # checks for native programs to generate building tool
 
-if test ${cross_compiling} = yes; then
+if test "${cross_compiling}" = yes -o -n "${CC_BUILD}"; then
   AC_CHECK_PROG(CC_BUILD, ${build}-gcc, ${build}-gcc)
   test -z "${CC_BUILD}" && AC_CHECK_PROG(CC_BUILD, gcc, gcc)
   test -z "${CC_BUILD}" && AC_CHECK_PROG(CC_BUILD, cc, cc, , , /usr/ucb/cc)
   test -z "${CC_BUILD}" && AC_CHECK_PROG(CC_BUILD, clang, clang)
   test -z "${CC_BUILD}" && AC_MSG_ERROR([cannot find native C compiler])
 
+  test -z "${CFLAGS_BUILD}" && CFLAGS_BUILD=${CFLAGS}
+  test -z "${LDFLAGS_BUILD}" && LDFLAGS_BUILD=${LDFLAGS}
+
   AC_MSG_CHECKING([for suffix of native executables])
   rm -f a.* b.* a_out.exe conftest.*
   echo > conftest.c "int main(void) { return 0;}"
-  ${CC_BUILD} conftest.c || AC_MSG_ERROR([native C compiler is not working])
+  ${CC_BUILD} ${CFLAGS_BUILD} conftest.c ${LDFLAGS_BUILD} || AC_MSG_ERROR([native C compiler is not working])
   rm -f conftest.c
   if test -x a.out -o -x b.out -o -x conftest; then
     EXEEXT_BUILD=""
@@ -63,12 +66,10 @@ if test ${cross_compiling} = yes; then
   fi
   rm -f a.* b.* a_out.exe conftest.*
   AC_MSG_RESULT($EXEEXT_BUILD)
-  CFLAGS_BUILD=
-  LDFLAGS_BUILD=
 else
   CC_BUILD=${CC}
-  CFLAGS_BUILD=${CFLAGS}
-  LDFLAGS_BUILD=${LDFLAGS}
+  test -z "${CFLAGS_BUILD}" && CFLAGS_BUILD=${CFLAGS}
+  test -z "${LDFLAGS_BUILD}" && LDFLAGS_BUILD=${LDFLAGS}
   EXEEXT_BUILD=${EXEEXT}
 fi
 
