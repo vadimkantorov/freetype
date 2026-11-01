@@ -19,12 +19,12 @@ jobs:
           bash autogen.sh
 
           #works
-          #export CFLAGS="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
+          #export CFLAGS="-sEXECUTABLE -sNODERAWFS"
           #emconfigure ./configure
           #emmake make
           
           #works
-          #emconfigure ./configure CFLAGS="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
+          #emconfigure ./configure CFLAGS="-sEXECUTABLE -sNODERAWFS"
           #emmake make
           
           #works
@@ -33,13 +33,13 @@ jobs:
           
           #doesntwork
           #emconfigure ./configure
-          #emmake make CFLAGS="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
+          #emmake make CFLAGS="-sEXECUTABLE -sNODERAWFS"
 
           #doesntwork
           #emconfigure ./configure
-          #emmake make CFLAGS_BUILD="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
+          #emmake make CFLAGS_BUILD="-sEXECUTABLE -sNODERAWFS"
 
           #doesntwork
-          #export CCexe_CFLAGS="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
+          #export CCexe_CFLAGS="-sEXECUTABLE -sNODERAWFS"
           #emconfigure ./configure
           #emmake make 
