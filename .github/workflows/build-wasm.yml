@@ -28,8 +28,8 @@ jobs:
           #emmake make
           
           #works
-          emconfigure ./configure
-          emmake make CCexe_CFLAGS="-sEXECUTABLE -sNODERAWFS"
+          #emconfigure ./configure
+          #emmake make CCexe_CFLAGS="-sEXECUTABLE -sNODERAWFS"
           
           #doesntwork
           #emconfigure ./configure
@@ -43,3 +43,6 @@ jobs:
           #export CCexe_CFLAGS="-sEXECUTABLE -sNODERAWFS"
           #emconfigure ./configure
           #emmake make 
+
+          emconfigure ./configure CC_BUILD=gcc
+          emmake make
