@@ -27,5 +27,11 @@ jobs:
           #emconfigure ./configure CFLAGS="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
           #emmake make
           
+          #doesntwork
+          #emconfigure ./configure
+          #emmake make CFLAGS="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
+
+          #doesntwork
           emconfigure ./configure
           emmake make CFLAGS_BUILD="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
+          cat Makefile
