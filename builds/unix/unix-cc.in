@@ -110,10 +110,16 @@ LDFLAGS := @LDFLAGS@
 
 # export symbols
 #
+# No need to build and run `apinames' if we don't build a shared library,
+# since `EXPORTS_LIST' (and thus the `-export-symbols' libtool flag) is
+# only used for that purpose; see `exports.mk'.
+#
 CCraw_build   := @CC_BUILD@               # native CC of building system
 E_BUILD       := @EXEEXT_BUILD@           # extension for executable on
                                           # building system
-EXPORTS_LIST  := $(OBJ_DIR)/ftexport.sym
+ifeq ($(build_libtool_libs),yes)
+  EXPORTS_LIST := $(OBJ_DIR)/ftexport.sym
+endif
 CCexe         := $(CCraw_build)           # used to compile `apinames` only,
                                           # see `exports.mk`
 CCexe_CFLAGS  := @CFLAGS_BUILD@           # ditto
@@ -125,7 +131,7 @@ CCexe_LDFLAGS := @LDFLAGS_BUILD@          # ditto
 LINK_LIBRARY = $(LIBTOOL) --mode=link $(CCraw) -o $@ $(OBJECTS_LIST) \
                           -rpath $(libdir) -version-info $(version_info) \
                           $(LDFLAGS) -no-undefined \
-                          -export-symbols $(EXPORTS_LIST)
+                          $(if $(EXPORTS_LIST),-export-symbols $(EXPORTS_LIST))
 
 # For the demo programs.
 FT_DEMO_CFLAGS := @FT_DEMO_CFLAGS@
