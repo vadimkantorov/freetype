@@ -5,7 +5,7 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - name: Install Prerequisites
-        run:  echo ok #sudo apt-get install -y automake autoconf autopoint gettext   gperf p7zip-full strace icu-devtools libarchive-tools
+        run:  sudo apt-get install -y automake autoconf 
 
       - name: Setup Emscripten
         uses: emscripten-core/setup-emsdk@v15
@@ -16,5 +16,6 @@ jobs:
 
       - name: Build wasm
         run: |
+          bash autogen.sh
           emconfigure ./configure
           emmake make
