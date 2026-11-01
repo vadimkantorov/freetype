@@ -32,10 +32,10 @@ jobs:
           #emmake make CFLAGS="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
 
           #doesntwork
-          emconfigure ./configure
-          cat Makefile
-          emmake make CFLAGS_BUILD="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
+          #emconfigure ./configure
+          #emmake make CFLAGS_BUILD="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
 
           #doesntwork
-          #emconfigure ./configure
-          #emmake make CCexe_CFLAGS="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
+          emconfigure ./configure
+          cat Makefile
+          emmake make -e CCexe_CFLAGS="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
