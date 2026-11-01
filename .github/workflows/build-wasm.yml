@@ -28,8 +28,8 @@ jobs:
           #emmake make
           
           #works
-          #emconfigure ./configure
-          #emmake make CCexe_CFLAGS="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
+          emconfigure ./configure
+          emmake make CCexe_CFLAGS="-sEXECUTABLE -sNODERAWFS"
           
           #doesntwork
           #emconfigure ./configure
@@ -39,6 +39,7 @@ jobs:
           #emconfigure ./configure
           #emmake make CFLAGS_BUILD="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
 
-          export CCexe_CFLAGS="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
-          emconfigure ./configure
-          emmake make 
+          #doesntwork
+          #export CCexe_CFLAGS="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
+          #emconfigure ./configure
+          #emmake make 
