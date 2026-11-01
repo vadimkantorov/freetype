@@ -18,5 +18,6 @@ jobs:
         run: |
           bash autogen.sh
           export CFLAGS_BUILD="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
+          export CFLAGS="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
           emconfigure ./configure
           emmake make
