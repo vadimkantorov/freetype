@@ -28,4 +28,4 @@ jobs:
           #emmake make
           
           emconfigure ./configure
-          emmake make CFLAGS="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
+          emmake make CFLAGS_BUILD="-sEXECUTABLE -sNODERAWFS -sFORCE_FILESYSTEM"
